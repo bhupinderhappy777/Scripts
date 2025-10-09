@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DIR=${1:-.}
-OUT="hash_file.csv"
+OUT="$DIR/hash_file.csv"
 CONCURRENCY=32
 
 # Detect available SHA-256 tool (prefer sha256sum, fallback to shasum)
@@ -18,16 +18,44 @@ else
     exit 2
 fi
 
-# Write CSV header (full absolute path in first column)
-printf '%s\n' "fullpath,filename,sha256" > "$OUT"
+# If hash file doesn't exist, create with header; otherwise we'll append
+if [ ! -f "$OUT" ]; then
+  printf '%s\n' "fullpath,filename,sha256" > "$OUT"
+fi
 
 echo "Scanning directory: $DIR" >&2
 
-export HASH_PROG HASH_ARGS
+# Prepare temporary files (auto-cleanup on exit)
+TMP_NEW=$(mktemp -t hash_file.new.XXXXXX) || exit 1
+TMP_EXISTING_PATHS=$(mktemp -t hash_file.existing.XXXXXX) || { rm -f "$TMP_NEW"; exit 1; }
+trap 'rm -f "$TMP_NEW" "$TMP_EXISTING_PATHS"' EXIT
 
-find "$DIR" -type f -print0 | \
+# Extract existing paths from hash file CSV (first column, unquoted)
+if [ -s "$OUT" ]; then
+  awk -F, 'NR>1{p=$1; gsub(/^\s*"?/,"",p); gsub(/"?\s*$/,"",p); print p}' "$OUT" > "$TMP_EXISTING_PATHS"
+fi
+
+export HASH_PROG HASH_ARGS TMP_EXISTING_PATHS
+
+find "$DIR" -type f ! -name "hash_file.csv" -print0 | \
     xargs -0 -n1 -P "$CONCURRENCY" sh -c '
 f="$1"
+
+# Get absolute path first
+if command -v realpath >/dev/null 2>&1; then
+    fullpath=$(realpath "$f")
+elif command -v readlink >/dev/null 2>&1; then
+    fullpath=$(readlink -f "$f")
+else
+    fullpath=$(python3 -c "import os,sys;print(os.path.abspath(sys.argv[1]))" "$f")
+fi
+
+# Check if this file is already in the CSV (skip if it exists)
+if [ -s "$TMP_EXISTING_PATHS" ] && grep -Fxq "$fullpath" "$TMP_EXISTING_PATHS"; then
+    printf "SKIPPING (already in hash_file): %s\n" "$f" >&2
+    exit 0
+fi
+
 printf "HASHING: %s\n" "$f" >&2
 digest=$($HASH_PROG $HASH_ARGS "$f" 2>/dev/null | awk "{print \$1}")
 if [ -z "$digest" ]; then
@@ -36,19 +64,19 @@ if [ -z "$digest" ]; then
     fi
 fi
 filename=$(basename -- "$f")
-if command -v realpath >/dev/null 2>&1; then
-    fullpath=$(realpath "$f")
-elif command -v readlink >/dev/null 2>&1; then
-    fullpath=$(readlink -f "$f")
-else
-    fullpath=$(python3 -c "import os,sys;print(os.path.abspath(sys.argv[1]))" "$f")
-fi
-esc() {
-    s="$1"
-    s=${s//\"/\"\"}
-    printf "\"%s\"" "$s"
-}
-printf "%s,%s,%s\n" "$(esc "$fullpath")" "$(esc "$filename")" "$(esc "$digest")"
-' sh >> "$OUT"
+# escape double-quotes for CSV fields (replace " with "")
+esc_fullpath=$(echo "$fullpath" | sed "s/\"/\"\"/g")
+esc_filename=$(echo "$filename" | sed "s/\"/\"\"/g")
+esc_digest=$(echo "$digest" | sed "s/\"/\"\"/g")
+printf "\"%s\",\"%s\",\"%s\"\n" "$esc_fullpath" "$esc_filename" "$esc_digest"
+' sh > "$TMP_NEW"
 
-echo "Wrote hashes to $OUT"
+# Append new entries to hash file
+if [ -s "$TMP_NEW" ]; then
+  cat "$TMP_NEW" >> "$OUT"
+  echo "Appended $(wc -l < "$TMP_NEW" | tr -d ' ') new rows to $OUT"
+else
+  echo "No new files to add to $OUT"
+fi
+
+echo "Hash file is at: $OUT"
