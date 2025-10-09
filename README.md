@@ -5,6 +5,24 @@ generate SHA-256 inventories for a master dataset and a compared dataset,
 find duplicate files by hash, and safely delete duplicates from the
 compared location.
 
+## Quick Start (No Download Required)
+
+You can run the complete deduplication workflow directly from GitHub without downloading any scripts:
+
+```bash
+bash <(curl -s https://raw.githubusercontent.com/bhupinderhappy777/Scripts/main/deduplicate.sh)
+```
+
+This command will:
+- Fetch the main orchestration script from GitHub
+- Automatically download and execute all required helper scripts on-the-fly
+- Not leave any script files on your system (only data files like CSVs and logs)
+- Work exactly the same as if you had cloned the repository locally
+
+**Prerequisites**: You only need `bash`, `curl`, and `python3` installed. The script will prompt you for:
+- Master Directory Path (your main file collection)
+- Compared Directory Path (folder with files to deduplicate)
+
 ## Complete Automated Deduplication Process
 
 The `deduplicate.sh` script provides a **fully automated end-to-end workflow**
@@ -45,13 +63,27 @@ The automated deduplication workflow performs the following steps:
 
 ### Usage: Running the Automated Process
 
-To run the complete automated deduplication:
+You have two options to run the complete automated deduplication:
+
+**Option 1: Direct execution from GitHub (recommended for one-time use)**
+
+No download required - the script fetches everything from GitHub:
 
 ```bash
+bash <(curl -s https://raw.githubusercontent.com/bhupinderhappy777/Scripts/main/deduplicate.sh)
+```
+
+**Option 2: Clone repository and run locally**
+
+If you prefer to have the scripts locally or want to modify them:
+
+```bash
+git clone https://github.com/bhupinderhappy777/Scripts.git
+cd Scripts
 ./deduplicate.sh
 ```
 
-The script will interactively prompt you for:
+Both methods work identically. The script will interactively prompt you for:
 - **Master Directory Path**: Your main/primary file collection
 - **Compared Directory Path**: The folder containing files to be deduplicated and integrated
 
@@ -161,6 +193,10 @@ After the automated process completes:
   timestamped log of the entire process, including which files were hashed,
   which were moved, and any errors encountered.
 
+**Note**: When using the curl method (Quick Start), no script files are downloaded to your
+system. All scripts are fetched from GitHub and executed directly, leaving only your
+data files (CSVs, logs) and your actual file collections.
+
 ### Safety Features
 
 The automated process includes several safety features:
@@ -175,12 +211,16 @@ The automated process includes several safety features:
 ### Prerequisites for Automated Process
 
 The automated script requires:
-- All the individual scripts in the same directory (`generate_master_hashes.sh`,
-  `generate_hash_file.sh`, `compare_hashes.sh`, `deletion.sh`, `fdupes.sh`,
-  `move_to_master.sh`)
+- `bash` shell
+- `curl` (for remote execution method)
 - `python3` for CSV parsing and file operations
 - `sha256sum` or `shasum` for hash generation
 - `fdupes` (optional, but recommended for step 6 - internal duplicate detection)
+
+When running locally, all the individual scripts must be in the same directory
+(`generate_master_hashes.sh`, `generate_hash_file.sh`, `compare_hashes.sh`,
+`deletion.sh`, `fdupes.sh`, `move_to_master.sh`). When using the curl method,
+scripts are fetched automatically from GitHub.
 
 If `fdupes` is not installed, step 6 will be skipped with a warning, but the rest
 of the process will continue normally.
