@@ -5,6 +5,209 @@ generate SHA-256 inventories for a master dataset and a compared dataset,
 find duplicate files by hash, and safely delete duplicates from the
 compared location.
 
+## Complete Automated Deduplication Process
+
+The `deduplicate.sh` script provides a **fully automated end-to-end workflow**
+that orchestrates all the individual scripts to perform a complete deduplication
+process. This is the **recommended way** to use the deduplication system.
+
+### What the Automated Process Does
+
+The automated deduplication workflow performs the following steps:
+
+1. **Generate/Update Master Hashes** - Scans the master folder and creates or
+   updates `master_hashes.csv` with SHA-256 hashes of all files. The master
+   folder is your "source of truth" containing your primary file collection.
+
+2. **Generate/Update Compared Folder Hashes** - Scans the folder to be compared
+   (typically a new folder with files you want to integrate) and creates
+   `hash_file.csv` in that folder with SHA-256 hashes of all files.
+
+3. **Compare Hashes** - Compares the hashes from both folders to identify exact
+   duplicates (files that already exist in the master folder). Creates a
+   `*.comparison.csv` file listing all duplicate matches.
+
+4. **Move Duplicates to Quarantine** - Moves duplicate files from the compared
+   folder to a quarantine folder named `<foldername>-quarantined` in the parent
+   directory. This ensures duplicates are safely stored (not deleted) for review.
+
+5. **Find Internal Duplicates** - Uses the `fdupes` tool to find duplicates
+   within the compared folder itself (files that are duplicates of each other
+   within the same folder). Moves these internal duplicates to quarantine,
+   keeping one copy.
+
+6. **Move Unique Files to Master** - After removing duplicates, moves all
+   remaining unique files from the compared folder to the master folder,
+   preserving directory structure. Updates `master_hashes.csv` with the new files.
+
+7. **Generate Summary Report** - Displays a comprehensive summary showing file
+   counts, processing time, and locations of all files.
+
+### Usage: Running the Automated Process
+
+To run the complete automated deduplication:
+
+```bash
+./deduplicate.sh
+```
+
+The script will interactively prompt you for:
+- **Master Directory Path**: Your main/primary file collection
+- **Compared Directory Path**: The folder containing files to be deduplicated and integrated
+
+### Example Workflow
+
+```bash
+$ ./deduplicate.sh
+========================================
+Step 1: Input Directories
+========================================
+Enter Master Directory Path: /home/user/Photos/Master
+Enter Path to be Compared: /home/user/Photos/NewPhotos
+
+========================================
+Step 2: Generating/Updating Master Hashes
+========================================
+Scanning directory: /home/user/Photos/Master
+HASHING: /home/user/Photos/Master/vacation/img001.jpg
+HASHING: /home/user/Photos/Master/vacation/img002.jpg
+...
+✓ Master hashes updated (45s)
+
+========================================
+Step 3: Generating/Updating Compared Folder Hashes
+========================================
+Scanning directory: /home/user/Photos/NewPhotos
+HASHING: /home/user/Photos/NewPhotos/photo1.jpg
+...
+✓ Compared folder hashes updated (23s)
+
+========================================
+Step 4: Comparing Hashes
+========================================
+Read 1500 unique digests from master
+Read 800 unique digests from target
+Wrote 150 matching rows to /home/user/Photos/NewPhotos.comparison.csv
+✓ Hash comparison completed (2s)
+
+========================================
+Step 5: Moving Duplicates to Quarantine
+========================================
+Found 150 duplicate matches. Moving to quarantine...
+Base folder determined: /home/user/Photos/NewPhotos
+Quarantine folder: /home/user/Photos/NewPhotos-quarantined
+Moved: photo1.jpg -> /home/user/Photos/NewPhotos-quarantined/photo1.jpg
+...
+✓ Duplicates moved to quarantine (12s)
+
+========================================
+Step 6: Finding Internal Duplicates with fdupes
+========================================
+Found 5 duplicate group(s)
+Summary: 5 duplicate file(s) will be moved to quarantine
+...
+✓ Internal duplicates processed (8s)
+
+========================================
+Step 7: Moving Unique Files to Master Folder
+========================================
+Remaining files in compared directory: 645
+Files to move (first 20 of 645 shown):
+  [1] unique_photo1.jpg
+  [2] unique_photo2.jpg
+...
+Moved: unique_photo1.jpg -> /home/user/Photos/Master/unique_photo1.jpg
+✓ Unique files moved to master (35s)
+
+========================================
+Step 8: Summary
+========================================
+
+╔════════════════════════════════════════════════════════╗
+║           DE-DUPLICATION SUMMARY REPORT                 ║
+╟────────────────────────────────────────────────────────╢
+║ Master Directory: /home/user/Photos/Master
+║ Compared Directory: /home/user/Photos/NewPhotos
+║
+║ Final File Counts:
+║   Files in Master:      2145
+║   Files in Compared:    0
+║   Files in Quarantine:  155
+║
+║ Total Processing Time:  125s
+║ Log File: deduplication_20251009_152430.log
+╚════════════════════════════════════════════════════════╝
+
+✓ De-duplication process completed!
+```
+
+### What Happens to Your Files
+
+After the automated process completes:
+
+- **Master Folder**: Contains all original files PLUS all unique files from the
+  compared folder. This is your complete, deduplicated collection.
+  
+- **Compared Folder**: Should be nearly empty (only `hash_file.csv` remains).
+  All files have been either moved to master (if unique) or quarantined (if duplicate).
+  
+- **Quarantine Folder** (`<foldername>-quarantined`): Contains all duplicate files
+  that were found. These files are safely stored, not deleted. You can:
+  - Review them to ensure they are truly duplicates
+  - Permanently delete them if you're confident they're duplicates
+  - Restore any files if needed
+
+- **Log File** (`deduplication_YYYYMMDD_HHMMSS.log`): Contains a complete
+  timestamped log of the entire process, including which files were hashed,
+  which were moved, and any errors encountered.
+
+### Safety Features
+
+The automated process includes several safety features:
+
+- **No Permanent Deletion**: Files are moved to quarantine, never deleted
+- **Hash-Based Comparison**: Uses SHA-256 cryptographic hashes for reliable duplicate detection
+- **Automatic Logging**: All operations are logged for audit trail
+- **Step-by-Step Progress**: Clear visual feedback at each step
+- **Error Handling**: Continues processing even if individual steps encounter non-fatal errors
+- **Collision Detection**: Aborts if hash collisions are detected in master updates
+
+### Prerequisites for Automated Process
+
+The automated script requires:
+- All the individual scripts in the same directory (`generate_master_hashes.sh`,
+  `generate_hash_file.sh`, `compare_hashes.sh`, `deletion.sh`, `fdupes.sh`,
+  `move_to_master.sh`)
+- `python3` for CSV parsing and file operations
+- `sha256sum` or `shasum` for hash generation
+- `fdupes` (optional, but recommended for step 6 - internal duplicate detection)
+
+If `fdupes` is not installed, step 6 will be skipped with a warning, but the rest
+of the process will continue normally.
+
+### When to Use the Automated Process
+
+Use `deduplicate.sh` when you want to:
+- Integrate a new batch of files into your master collection
+- Remove duplicates from a folder before adding to master
+- Consolidate multiple folders into one deduplicated master folder
+- Ensure no duplicate files exist between two folder hierarchies
+
+### Manual Process vs Automated Process
+
+You can still use the individual scripts for fine-grained control (see "Typical
+safe workflow" section below), but the automated `deduplicate.sh` script is
+recommended for most use cases as it:
+- Handles all steps automatically in the correct order
+- Provides clear progress indication
+- Generates comprehensive logs
+- Includes error handling and recovery
+- Saves time and reduces the chance of mistakes
+
+---
+
+## Individual Scripts
+
 - Files
 - `generate_master_hashes.sh` — recursively walks a directory and writes
   `master_hashes.csv` containing the absolute path, filename, and SHA-256
@@ -33,6 +236,18 @@ compared location.
   working copy in the original location. The quarantine folder is created
   in the parent directory with the name `<foldername>-quarantined`.
   Supports dry-run and confirmation options.
+- `move_to_master.sh` — moves unique files from a compared folder to the
+  master folder after verifying they are not duplicates. Takes two arguments:
+  the compared folder and the master folder. Reads `hash_file.csv` from the
+  compared folder, checks hashes against `master_hashes.csv`, and only moves
+  files that don't already exist in the master collection. Updates
+  `master_hashes.csv` with newly moved files.
+- `deduplicate.sh` — **main orchestration script** that automates the complete
+  de-duplication workflow. Runs all the above scripts in the correct order to:
+  generate hashes for master and compared folders, compare them, move duplicates
+  to quarantine, find internal duplicates with fdupes, move unique files to
+  master, and generate a comprehensive summary report. See "Complete Automated
+  Deduplication Process" section above for details.
 
 Prerequisites
 - A POSIX-like shell (Bash). On Windows use WSL, Git Bash, or similar.
@@ -63,7 +278,12 @@ CSV formats
   Each row represents one matching digest; if multiple files share the
   same digest on either side the script writes all cross-product matches.
 
-Typical safe workflow
+Manual workflow (using individual scripts)
+
+If you prefer fine-grained control over each step, you can run the individual
+scripts manually. This is useful for advanced users who want to inspect results
+at each stage or integrate the scripts into custom workflows.
+
 1. Generate the master inventory from the master folder (run in the
    directory where you want `master_hashes.csv`):
 
@@ -101,6 +321,11 @@ Typical safe workflow
 The script will move duplicate files to a quarantine folder (e.g.,
 `<foldername>-quarantined`) in the parent directory, preserving the directory
 structure.
+
+**Note**: When using the manual workflow, you'll need to manually run the
+`fdupes.sh` and `move_to_master.sh` scripts if you want internal duplicate
+detection and file consolidation. The automated `deduplicate.sh` handles all
+of this for you.
 
 Alternative workflow with fdupes
 If you prefer a simpler single-folder duplicate removal approach using the
