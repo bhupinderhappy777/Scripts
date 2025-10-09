@@ -94,16 +94,21 @@ def normalize_row(row):
 
 # Load master hashes (digest -> list of paths)
 master_digests = set()
+master_paths = set()
 for row in rows_from_csv(master_csv):
-    _, _, digest = normalize_row(row)
+    path, _, digest = normalize_row(row)
     if digest:
         master_digests.add(digest)
+    if path:
+        master_paths.add(os.path.abspath(path))
 
 print(f'Loaded {len(master_digests)} unique digests from master CSV', file=sys.stderr)
+print(f'Loaded {len(master_paths)} unique paths from master CSV', file=sys.stderr)
 
 # Process compared files
 files_to_move = []
 duplicates_skipped = []
+already_in_master_location = []
 
 for row in rows_from_csv(compared_csv):
     path, filename, digest = normalize_row(row)
@@ -112,7 +117,15 @@ for row in rows_from_csv(compared_csv):
     
     # Check if this digest already exists in master
     if digest in master_digests:
-        duplicates_skipped.append((path, filename))
+        duplicates_skipped.append((path, filename, digest))
+        print(f'  [SKIP] {filename} - duplicate hash already in master', file=sys.stderr)
+        continue
+    
+    # Check if file is already in master directory (might be from previous run)
+    abs_path = os.path.abspath(path)
+    if abs_path in master_paths:
+        already_in_master_location.append((path, filename))
+        print(f'  [SKIP] {filename} - already at master location', file=sys.stderr)
         continue
     
     # File is unique, add to move list
@@ -121,8 +134,26 @@ for row in rows_from_csv(compared_csv):
 print()
 print(f'Summary:')
 print(f'  Files to move to master: {len(files_to_move)}')
-print(f'  Duplicates skipped: {len(duplicates_skipped)}')
+print(f'  Duplicates skipped (hash already exists): {len(duplicates_skipped)}')
+print(f'  Files already in master location: {len(already_in_master_location)}')
 print()
+
+# Log detailed information about why files were skipped
+if duplicates_skipped:
+    print(f'Files skipped due to duplicate hashes (first 10 shown):', file=sys.stderr)
+    for i, (path, filename, digest) in enumerate(duplicates_skipped[:10]):
+        print(f'  [{i+1}] {filename} (hash: {digest[:16]}...)', file=sys.stderr)
+    if len(duplicates_skipped) > 10:
+        print(f'  ... and {len(duplicates_skipped)-10} more', file=sys.stderr)
+    print(file=sys.stderr)
+
+if already_in_master_location:
+    print(f'Files already in master location (first 10 shown):', file=sys.stderr)
+    for i, (path, filename) in enumerate(already_in_master_location[:10]):
+        print(f'  [{i+1}] {filename}', file=sys.stderr)
+    if len(already_in_master_location) > 10:
+        print(f'  ... and {len(already_in_master_location)-10} more', file=sys.stderr)
+    print(file=sys.stderr)
 
 if not files_to_move:
     print('No unique files to move.')
@@ -139,13 +170,16 @@ print()
 # Move files
 moved = 0
 errors = 0
+skipped_already_exists = 0
 new_rows = []
+
+print('Processing files...', file=sys.stderr)
 
 for path, filename, digest in files_to_move:
     try:
         # Verify source file exists
         if not os.path.exists(path):
-            print(f'Warning: Source file not found: {path}')
+            print(f'Warning: Source file not found: {path}', file=sys.stderr)
             errors += 1
             continue
         
@@ -161,39 +195,85 @@ for path, filename, digest in files_to_move:
         # Create destination directory if needed
         if not os.path.exists(dest_dir):
             os.makedirs(dest_dir)
+            print(f'  Created directory: {dest_dir}', file=sys.stderr)
         
-        # Handle file name conflicts
+        # Check if destination file exists
+        original_dest = dest_path
         if os.path.exists(dest_path):
-            base, ext = os.path.splitext(dest_path)
-            counter = 1
-            while os.path.exists(f"{base}_{counter}{ext}"):
-                counter += 1
-            dest_path = f"{base}_{counter}{ext}"
+            # Calculate hash of existing file to check if it's truly different
+            import hashlib
+            with open(dest_path, 'rb') as f:
+                existing_hash = hashlib.sha256(f.read()).hexdigest()
+            
+            if existing_hash == digest:
+                # Same content, skip the move
+                print(f'  [SKIP] {filename} - identical file already exists at destination', file=sys.stderr)
+                skipped_already_exists += 1
+                # Don't add to master CSV since it should already be there
+                continue
+            else:
+                # Different content, add suffix to avoid overwriting
+                print(f'  [WARNING] File exists with different content: {dest_path}', file=sys.stderr)
+                print(f'    Existing hash: {existing_hash[:16]}...', file=sys.stderr)
+                print(f'    New file hash: {digest[:16]}...', file=sys.stderr)
+                base, ext = os.path.splitext(dest_path)
+                counter = 1
+                while os.path.exists(f"{base}_{counter}{ext}"):
+                    counter += 1
+                dest_path = f"{base}_{counter}{ext}"
+                print(f'    Renaming to: {os.path.basename(dest_path)}', file=sys.stderr)
         
         # Move the file
         shutil.move(path, dest_path)
         moved += 1
-        print(f'Moved: {filename} -> {dest_path}')
+        print(f'  [MOVED] {filename} -> {dest_path}', file=sys.stderr)
         
         # Add to new rows for master CSV (use absolute path)
         abs_dest = os.path.abspath(dest_path)
         new_rows.append([abs_dest, filename, digest])
         
     except Exception as e:
-        print(f'Error moving {path}: {e}', file=sys.stderr)
+        print(f'  [ERROR] Failed to move {path}: {e}', file=sys.stderr)
         errors += 1
 
 # Update master CSV with new files
 if new_rows:
+    print(f'\nVerifying new entries before adding to master CSV...', file=sys.stderr)
+    
+    # Before adding, verify none of these digests already exist in master
+    new_digests = {row[2] for row in new_rows}
+    duplicate_digests = new_digests & master_digests
+    
+    if duplicate_digests:
+        print(f'ERROR: Attempted to add {len(duplicate_digests)} duplicate digest(s) to master CSV!', file=sys.stderr)
+        print(f'This should not happen. Duplicate digests:', file=sys.stderr)
+        for dig in list(duplicate_digests)[:5]:
+            print(f'  {dig}', file=sys.stderr)
+        print(f'ABORTING update to master CSV to prevent corruption.', file=sys.stderr)
+        sys.exit(10)
+    
+    # Write new entries
     with open(master_csv, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         for row in new_rows:
             writer.writerow(row)
-    print()
-    print(f'Updated {master_csv} with {len(new_rows)} new entries')
+    print(f'Successfully updated {master_csv} with {len(new_rows)} new entries', file=sys.stderr)
 
 print()
-print(f'Finished. moved={moved} errors={errors}')
+print(f'===== MOVE TO MASTER SUMMARY =====')
+print(f'Files successfully moved:    {moved}')
+print(f'Files skipped (same content): {skipped_already_exists}')
+print(f'Errors encountered:          {errors}')
+print(f'Master CSV entries added:    {len(new_rows)}')
+print()
+
+if moved > 0:
+    print(f'✓ Successfully moved {moved} unique file(s) to master folder')
+if skipped_already_exists > 0:
+    print(f'ℹ Skipped {skipped_already_exists} file(s) already in destination with same content')
+if errors > 0:
+    print(f'⚠ {errors} error(s) occurred during move operation')
+    sys.exit(1)
 PY
 
 echo "Done."

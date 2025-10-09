@@ -281,6 +281,33 @@ log_print "║ Log File: $LOG_FILE"
 log_print "╚════════════════════════════════════════════════════════╝"
 echo ""
 
+# Add diagnostic information if files remain in compared directory
+if [ "$COMPARED_FILE_COUNT" -gt 0 ]; then
+    print_warning "Files remaining in compared directory!"
+    log_print ""
+    log_print "═══ DIAGNOSTIC INFORMATION ═══"
+    log_print "Files remain in the compared directory. Possible reasons:"
+    log_print "  1. Files have duplicate hashes (same content as master)"
+    log_print "  2. Files encountered errors during move operation"
+    log_print "  3. Files already exist at destination with same content"
+    log_print "  4. Script was interrupted or encountered unexpected conditions"
+    log_print ""
+    log_print "Listing remaining files in compared directory:"
+    find "$COMPARED_DIR" -type f ! -name "hash_file.csv" 2>/dev/null | head -20 | while read -r file; do
+        log_print "  - $file"
+    done
+    REMAINING_TOTAL=$(find "$COMPARED_DIR" -type f ! -name "hash_file.csv" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$REMAINING_TOTAL" -gt 20 ]; then
+        log_print "  ... and $((REMAINING_TOTAL - 20)) more files"
+    fi
+    log_print ""
+    log_print "To investigate further:"
+    log_print "  - Check the log file for detailed error messages: $LOG_FILE"
+    log_print "  - Compare hash_file.csv in compared directory with master_hashes.csv"
+    log_print "  - Verify if files have permissions issues or are in use"
+    log_print ""
+fi
+
 print_success "De-duplication process completed!"
 log_print ""
 log_print "=== De-duplication Process Completed ==="
