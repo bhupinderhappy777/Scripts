@@ -23,9 +23,11 @@ compared location.
   against the `master_hasher.csv` (preferred) or `master_hashes.csv` in
   the current working directory and produces a `*.comparison.csv` listing
   matching files.
-- `deletion.sh` — reads the produced `*.comparison.csv` and deletes the
-  files listed in the `compared_path`/`compared_filename` columns. Supports
-  dry-run and confirmation options.
+- `deletion.sh` — reads the produced `*.comparison.csv` and moves the
+  files listed in the `compared_path`/`compared_filename` columns to a
+  quarantine folder. The quarantine folder is created in the parent directory
+  with the name `<foldername>-quarantined`, similar to how `fdupes.sh` works.
+  Supports dry-run and confirmation options.
 - `fdupes.sh` — uses the `fdupes` tool to find duplicate files within a
   directory and moves duplicates to a quarantine folder while keeping one
   working copy in the original location. The quarantine folder is created
@@ -82,19 +84,23 @@ Typical safe workflow
 # -> creates: <path>.comparison.csv in the current directory
 ```
 
-4. Review the comparison file. Do a dry-run deletion first:
+4. Review the comparison file. Do a dry-run first to see what would be moved:
 
 ```bash
 ./deletion.sh -n
 ```
 
-5. If the dry-run looks correct, delete interactively (you must type YES)
-   or use `-y` to skip the prompt:
+5. If the dry-run looks correct, move files to quarantine interactively (you
+   must type YES) or use `-y` to skip the prompt:
 
 ```bash
 ./deletion.sh    # interactive confirmation (type YES)
-./deletion.sh -y # delete without prompt
+./deletion.sh -y # move without prompt
 ```
+
+The script will move duplicate files to a quarantine folder (e.g.,
+`<foldername>-quarantined`) in the parent directory, preserving the directory
+structure.
 
 Alternative workflow with fdupes
 If you prefer a simpler single-folder duplicate removal approach using the
@@ -125,19 +131,20 @@ Options and special cases
 - If multiple `*.comparison.csv` files exist in the working directory
   `deletion.sh` will refuse to choose — use `-f <file>` to specify the file.
 - `deletion.sh -n` is a recommended safety step; it lists files that would
-  be deleted and exits without removing anything.
+  be moved and exits without moving anything.
 - The scripts assume SHA-256 digests; if you need a different digest you
   must adapt the hash generation steps accordingly.
 - Paths in CSVs are absolute by design — this avoids ambiguity when
-  comparing or deleting files.
+  comparing or moving files.
 
 Safety and auditability suggestions
 - Keep copies of `master_hashes.csv` and the produced `*.comparison.csv`
-  (they are the audit trail of what was matched and removed).
-- Instead of permanent deletion, you can modify `deletion.sh` to move
-  files to a quarantine directory or to the OS trash (platform-specific).
+  (they are the audit trail of what was matched and moved).
+- Files are moved to quarantine folders rather than permanently deleted,
+  making it easy to recover if needed. You can review the quarantine folder
+  and permanently delete files later if desired.
 - Consider adding file size and modification time into the CSV if you
-  want an extra check before deletion.
+  want an extra check before moving files.
 
 Troubleshooting
 - If `python3` is not found: install it (your distro package manager or
