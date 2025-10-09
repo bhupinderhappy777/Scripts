@@ -26,6 +26,11 @@ compared location.
 - `deletion.sh` — reads the produced `*.comparison.csv` and deletes the
   files listed in the `compared_path`/`compared_filename` columns. Supports
   dry-run and confirmation options.
+- `fdupes.sh` — uses the `fdupes` tool to find duplicate files within a
+  directory and moves duplicates to a quarantine folder while keeping one
+  working copy in the original location. The quarantine folder is created
+  in the parent directory with the name `<foldername>-quarantined`.
+  Supports dry-run and confirmation options.
 
 Prerequisites
 - A POSIX-like shell (Bash). On Windows use WSL, Git Bash, or similar.
@@ -33,8 +38,11 @@ Prerequisites
   `shasum` (with -a 256), or `openssl`.
 - `realpath` or `readlink -f` is preferred for canonical absolute paths;
   the scripts fall back to `python3` to compute absolute paths if needed.
-- `python3` (used by `compare_hashes.sh` and `deletion.sh` for robust CSV
-  parsing and deletion logic).
+- `python3` (used by `compare_hashes.sh`, `deletion.sh`, and `fdupes.sh`
+  for robust CSV parsing and file operations).
+- `fdupes` (required only for `fdupes.sh`; install with `apt-get install
+  fdupes` on Debian/Ubuntu, `yum install fdupes` on RedHat/CentOS, or
+  `brew install fdupes` on macOS).
 
 CSV formats
 - Master and hash files (`master_hashes.csv`, `hash_file.csv`) use this
@@ -88,6 +96,31 @@ Typical safe workflow
 ./deletion.sh -y # delete without prompt
 ```
 
+Alternative workflow with fdupes
+If you prefer a simpler single-folder duplicate removal approach using the
+`fdupes` tool, you can use the `fdupes.sh` script:
+
+1. Scan a folder for duplicates and move them to quarantine (dry-run first):
+
+```bash
+./fdupes.sh -n /path/to/folder
+# or for current directory:
+./fdupes.sh -n
+```
+
+2. If the dry-run looks correct, move duplicates to quarantine:
+
+```bash
+./fdupes.sh /path/to/folder       # interactive confirmation (type YES)
+./fdupes.sh -y /path/to/folder    # move without prompt
+```
+
+The script will:
+- Keep one copy of each duplicate in the original folder
+- Move all other duplicates to a `<foldername>-quarantined` folder in the
+  parent directory
+- Preserve directory structure in the quarantine folder
+
 Options and special cases
 - If multiple `*.comparison.csv` files exist in the working directory
   `deletion.sh` will refuse to choose — use `-f <file>` to specify the file.
@@ -113,6 +146,9 @@ Troubleshooting
 - If `realpath`/`readlink -f` aren't available the scripts will call
   `python3` to get absolute paths. Ensure `python3` is available.
 - If `sha256sum` isn't available, ensure `shasum` or `openssl` is on PATH.
+- If `fdupes` is not found (needed for `fdupes.sh`): install it with
+  `apt-get install fdupes` (Debian/Ubuntu), `yum install fdupes`
+  (RedHat/CentOS), or `brew install fdupes` (macOS).
 
 Possible improvements
 - Add file size and mtime to CSVs for stronger duplicate detection.
