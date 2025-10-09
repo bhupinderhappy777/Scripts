@@ -108,6 +108,12 @@ awk -F, '{g=$3; gsub(/^\s*"?/,"",g); gsub(/"?\s*$/,"",g); print g}' "$TMP_NEW" >
 # Check for duplicates within new digests
 if sort "$TMP_NEW_DIG" | uniq -d | grep -q .; then
   echo "Error: duplicate digests found within new files to add. Aborting." >&2
+  echo "" >&2
+  echo "EXPLANATION: Multiple files in the directory have identical content (same hash)." >&2
+  echo "This indicates duplicate files exist in the source directory itself." >&2
+  echo "Please remove duplicates from the source directory first, or use fdupes to clean them up." >&2
+  echo "" >&2
+  echo "Duplicate hashes found:" >&2
   sort "$TMP_NEW_DIG" | uniq -d >&2
   exit 6
 fi
@@ -115,7 +121,26 @@ fi
 # Check for digests that already exist in master
 if [ -s "$TMP_EXIST" ] && grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" >/dev/null 2>&1; then
   echo "Error: one or more computed digests already exist in $OUT. Aborting to avoid duplicates." >&2
-  grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" | sort -u >&2
+  echo "" >&2
+  echo "EXPLANATION: Files you're trying to add have the same content (hash) as files already in master." >&2
+  echo "This is the safety check that prevents adding duplicate entries to master_hashes.csv." >&2
+  echo "" >&2
+  echo "WHAT THIS MEANS:" >&2
+  echo "  - These files were likely already processed in a previous run" >&2
+  echo "  - OR: The same files exist in both the master and the directory being scanned" >&2
+  echo "  - OR: You're trying to re-run the script on files already in master" >&2
+  echo "" >&2
+  echo "WHAT TO DO:" >&2
+  echo "  1. If these files are already in master folder: This is expected, no action needed" >&2
+  echo "  2. If you need to re-scan: Delete or backup master_hashes.csv and regenerate from scratch" >&2
+  echo "  3. If files are in a different location: These are true duplicates (same content)" >&2
+  echo "" >&2
+  echo "Duplicate hashes found (first 10):" >&2
+  grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" | sort -u | head -10 >&2
+  TOTAL_DUPS=$(grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" | sort -u | wc -l | tr -d ' ')
+  if [ "$TOTAL_DUPS" -gt 10 ]; then
+    echo "... and $((TOTAL_DUPS - 10)) more duplicate(s)" >&2
+  fi
   exit 7
 fi
 

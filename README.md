@@ -207,6 +207,39 @@ The automated process includes several safety features:
 - **Step-by-Step Progress**: Clear visual feedback at each step
 - **Error Handling**: Continues processing even if individual steps encounter non-fatal errors
 - **Collision Detection**: Aborts if hash collisions are detected in master updates
+- **Duplicate Prevention**: Prevents adding duplicate entries to master_hashes.csv
+- **Detailed Diagnostics**: Explains why files remain in compared folder after processing
+- **File Conflict Resolution**: If file with same name but different content exists, renames with _1, _2 suffix
+
+### Recent Improvements
+
+**Enhanced Diagnostic Logging and Duplicate Prevention** (Latest Update)
+
+The deduplication scripts have been significantly improved to address common issues and provide better diagnostic information:
+
+1. **Detailed Explanations for Remaining Files**: When files remain in the compared folder after processing, the script now explains exactly why:
+   - Files with duplicate hashes (same content as master)
+   - Files already at destination with same content
+   - Errors during move operation
+   - Files already in master location from previous run
+
+2. **Duplicate Prevention**: Added comprehensive checks to prevent duplicate digest entries:
+   - Pre-validation before updating master_hashes.csv
+   - Clear error messages explaining why duplicates were found
+   - Actionable guidance on what to do about duplicates
+
+3. **File Conflict Resolution**: Enhanced handling of file name conflicts:
+   - Hash verification when file exists at destination
+   - If same content: Skip the move (file already there)
+   - If different content: Rename with _1, _2 suffix and log the decision
+   - Never overwrites files with different content
+
+4. **Comprehensive Error Messages**: All error messages now include:
+   - Explanation of what went wrong
+   - What it means in your specific situation
+   - Actionable steps to resolve the issue
+
+For detailed information about these improvements, see [IMPROVEMENTS.md](IMPROVEMENTS.md).
 
 ### Prerequisites for Automated Process
 
