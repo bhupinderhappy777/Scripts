@@ -40,17 +40,41 @@ echo "Scanning directory: $DIR" >&2
 TMP_NEW=$(mktemp -t master_hashes.new.XXXXXX) || exit 1
 TMP_EXIST=$(mktemp -t master_hashes.exist.XXXXXX) || { rm -f "$TMP_NEW"; exit 1; }
 TMP_NEW_DIG=$(mktemp -t master_hashes.newdig.XXXXXX) || { rm -f "$TMP_NEW" "$TMP_EXIST"; exit 1; }
-trap 'rm -f "$TMP_NEW" "$TMP_EXIST" "$TMP_NEW_DIG"' EXIT
+TMP_EXISTING_PATHS=$(mktemp -t master_hashes.existing.XXXXXX) || { rm -f "$TMP_NEW" "$TMP_EXIST" "$TMP_NEW_DIG"; exit 1; }
+trap 'rm -f "$TMP_NEW" "$TMP_EXIST" "$TMP_NEW_DIG" "$TMP_EXISTING_PATHS"' EXIT
+
+# Extract existing paths from master CSV (first column, unquoted)
+if [ -s "$OUT" ]; then
+  awk -F, 'NR>1{p=$1; gsub(/^\s*"?/,"",p); gsub(/"?\s*$/,"",p); print p}' "$OUT" > "$TMP_EXISTING_PATHS"
+fi
 
 # Worker: compute hash for a single file and print CSV line.
 # We use a single output stream so parallel workers can write safely.
 
-export HASH_PROG HASH_ARGS
+export HASH_PROG HASH_ARGS TMP_EXISTING_PATHS
 
 find "$DIR" -type f -print0 |
 	xargs -0 -n1 -P "$CONCURRENCY" sh -c '\
 f="$1"
+
+# Get absolute path first
+if command -v realpath >/dev/null 2>&1; then
+	fullpath=$(realpath "$f")
+elif command -v readlink >/dev/null 2>&1; then
+	fullpath=$(readlink -f "$f")
+else
+	# python fallback for absolute path
+	fullpath=$(python3 -c "import os,sys;print(os.path.abspath(sys.argv[1]))" "$f")
+fi
+
+# Check if this file is already in the CSV (skip if it exists)
+if [ -s "$TMP_EXISTING_PATHS" ] && grep -Fxq "$fullpath" "$TMP_EXISTING_PATHS"; then
+	printf "SKIPPING (already in master): %s\n" "$f" >&2
+	exit 0
+fi
+
 printf "HASHING: %s\n" "$f" >&2
+# compute hash (capture only the digest)
 # compute hash (capture only the digest)
 digest=$($HASH_PROG $HASH_ARGS "$f" 2>/dev/null | awk "{print \$1}")
 # fallback if digest empty
@@ -60,24 +84,13 @@ if [ -z "$digest" ]; then
 		digest=$(openssl dgst -sha256 -r "$f" 2>/dev/null | awk "{print \$1}")
 	fi
 fi
-# compute path and filename
-# compute filename and absolute path
+# compute filename
 filename=$(basename -- "$f")
-if command -v realpath >/dev/null 2>&1; then
-	fullpath=$(realpath "$f")
-elif command -v readlink >/dev/null 2>&1; then
-	fullpath=$(readlink -f "$f")
-else
-	# python fallback for absolute path
-	fullpath=$(python3 -c "import os,sys;print(os.path.abspath(sys.argv[1]))" "$f")
-fi
-# escape double-quotes for CSV fields
-esc() {
-	s="$1"
-	s=${s//\"/\"\"}
-	printf '"%s"' "$s"
-}
-printf "%s,%s,%s\n" "$(esc "$fullpath")" "$(esc "$filename")" "$(esc "$digest")"
+# escape double-quotes for CSV fields (replace " with "")
+esc_fullpath=$(echo "$fullpath" | sed "s/\"/\"\"/g")
+esc_filename=$(echo "$filename" | sed "s/\"/\"\"/g")
+esc_digest=$(echo "$digest" | sed "s/\"/\"\"/g")
+printf "\"%s\",\"%s\",\"%s\"\n" "$esc_fullpath" "$esc_filename" "$esc_digest"
 ' sh > "$TMP_NEW"
 
 # If no new entries, exit cleanly
