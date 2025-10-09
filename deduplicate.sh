@@ -14,6 +14,8 @@ set -euo pipefail
 #
 # Usage:
 #   ./deduplicate.sh
+#   or via curl (no download required):
+#   bash <(curl -s https://raw.githubusercontent.com/bhupinderhappy777/Scripts/main/deduplicate.sh)
 
 # Color codes for output
 RED='\033[0;31m'
@@ -22,11 +24,33 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# GitHub repository base URL for fetching scripts
+GITHUB_REPO_URL="https://raw.githubusercontent.com/bhupinderhappy777/Scripts/main"
+
 # Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# If running via curl, use current directory
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR="$(pwd)"
+fi
 
 # Log file for the session
 LOG_FILE="deduplication_$(date +%Y%m%d_%H%M%S).log"
+
+# Function to fetch and execute a script from GitHub
+fetch_and_run() {
+    local script_name="$1"
+    shift
+    local args=("$@")
+    
+    echo "Fetching $script_name from GitHub..." >&2
+    if curl -fsSL "${GITHUB_REPO_URL}/${script_name}" | bash -s -- "${args[@]}"; then
+        return 0
+    else
+        return 1
+    fi
+}
 
 # Function to print colored messages
 print_header() {
@@ -93,7 +117,7 @@ print_header "Step 2: Generating/Updating Master Hashes"
 log_print "=== Step 2: Generating/Updating Master Hashes ==="
 
 STEP_START=$(date +%s)
-if "$SCRIPT_DIR/generate_master_hashes.sh" "$MASTER_DIR" 2>&1 | tee -a "$LOG_FILE"; then
+if fetch_and_run "generate_master_hashes.sh" "$MASTER_DIR" 2>&1 | tee -a "$LOG_FILE"; then
     STEP_END=$(date +%s)
     STEP_TIME=$((STEP_END - STEP_START))
     print_success "Master hashes updated (${STEP_TIME}s)"
@@ -110,7 +134,7 @@ print_header "Step 3: Generating/Updating Compared Folder Hashes"
 log_print "=== Step 3: Generating/Updating Compared Folder Hashes ==="
 
 STEP_START=$(date +%s)
-if "$SCRIPT_DIR/generate_hash_file.sh" "$COMPARED_DIR" 2>&1 | tee -a "$LOG_FILE"; then
+if fetch_and_run "generate_hash_file.sh" "$COMPARED_DIR" 2>&1 | tee -a "$LOG_FILE"; then
     STEP_END=$(date +%s)
     STEP_TIME=$((STEP_END - STEP_START))
     print_success "Compared folder hashes updated (${STEP_TIME}s)"
@@ -127,7 +151,7 @@ print_header "Step 4: Comparing Hashes"
 log_print "=== Step 4: Comparing Hashes ==="
 
 STEP_START=$(date +%s)
-if "$SCRIPT_DIR/compare_hashes.sh" "$COMPARED_DIR" 2>&1 | tee -a "$LOG_FILE"; then
+if fetch_and_run "compare_hashes.sh" "$COMPARED_DIR" 2>&1 | tee -a "$LOG_FILE"; then
     STEP_END=$(date +%s)
     STEP_TIME=$((STEP_END - STEP_START))
     print_success "Hash comparison completed (${STEP_TIME}s)"
@@ -158,7 +182,7 @@ else
         log_print "No duplicates found in comparison."
     else
         log_print "Found $MATCH_COUNT duplicate matches. Moving to quarantine..."
-        if "$SCRIPT_DIR/deletion.sh" -y 2>&1 | tee -a "$LOG_FILE"; then
+        if fetch_and_run "deletion.sh" "-y" 2>&1 | tee -a "$LOG_FILE"; then
             STEP_END=$(date +%s)
             STEP_TIME=$((STEP_END - STEP_START))
             print_success "Duplicates moved to quarantine (${STEP_TIME}s)"
@@ -182,7 +206,7 @@ if ! command -v fdupes >/dev/null 2>&1; then
     print_warning "fdupes not installed. Skipping internal duplicate detection."
     log_print "WARNING: fdupes not installed. Skipping internal duplicate detection."
 else
-    if "$SCRIPT_DIR/fdupes.sh" -y "$COMPARED_DIR" 2>&1 | tee -a "$LOG_FILE"; then
+    if fetch_and_run "fdupes.sh" "-y" "$COMPARED_DIR" 2>&1 | tee -a "$LOG_FILE"; then
         STEP_END=$(date +%s)
         STEP_TIME=$((STEP_END - STEP_START))
         print_success "Internal duplicates processed (${STEP_TIME}s)"
@@ -208,7 +232,7 @@ if [ "$REMAINING_COUNT" -eq 0 ]; then
     print_warning "No files remaining in compared directory to move."
     log_print "No files remaining to move to master."
 else
-    if "$SCRIPT_DIR/move_to_master.sh" "$COMPARED_DIR" "$MASTER_DIR" 2>&1 | tee -a "$LOG_FILE"; then
+    if fetch_and_run "move_to_master.sh" "$COMPARED_DIR" "$MASTER_DIR" 2>&1 | tee -a "$LOG_FILE"; then
         STEP_END=$(date +%s)
         STEP_TIME=$((STEP_END - STEP_START))
         print_success "Unique files moved to master (${STEP_TIME}s)"
