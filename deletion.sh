@@ -84,6 +84,8 @@ if not rows:
     print('No rows found in', csvpath)
     sys.exit(0)
 
+print(f'Read {len(rows)} CSV rows (including header if present) from {csvpath}', file=sys.stderr)
+
 first = [c.strip().lower() for c in rows[0]]
 has_header = any(h in ('master_path','compared_path','master_filename','compared_filename') for h in first)
 if has_header:
@@ -147,6 +149,8 @@ if len(files) > 20:
 if dryrun:
     print('\nDry-run mode: no files will be removed.')
     sys.exit(0)
+
+print('Proceeding to deletion phase...', file=sys.stderr)
 
 if not autoconfirm:
     try:

@@ -30,7 +30,12 @@ else
 fi
 
 # Write CSV header (full absolute path in first column)
+	HASH_PROG=sha256sum
+	HASH_ARGS="--"
+elif command -v shasum >/dev/null 2>&1; then
 printf '%s\n' "fullpath,filename,sha256" > "$OUT"
+
+echo "Scanning directory: $DIR" >&2
 
 # Worker: compute hash for a single file and print CSV line.
 # We use a single output stream so parallel workers can write safely.
@@ -40,6 +45,7 @@ export HASH_PROG HASH_ARGS
 find "$DIR" -type f -print0 |
 	xargs -0 -n1 -P "$CONCURRENCY" sh -c '\
 f="$1"
+printf "HASHING: %s\n" "$f" >&2
 # compute hash (capture only the digest)
 digest=$($HASH_PROG $HASH_ARGS "$f" 2>/dev/null | awk "{print \$1}")
 # fallback if digest empty
@@ -69,4 +75,5 @@ esc() {
 printf "%s,%s,%s\n" "$(esc "$fullpath")" "$(esc "$filename")" "$(esc "$digest")"
 ' sh >> "$OUT"
 
+echo "Wrote hashes to $OUT"
 echo "Wrote hashes to $OUT"

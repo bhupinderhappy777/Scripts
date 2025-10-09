@@ -34,6 +34,8 @@ if [ ! -f "$OUT" ]; then
   printf '%s\n' "fullpath,filename,sha256" > "$OUT"
 fi
 
+echo "Scanning directory: $DIR" >&2
+
 # Prepare temporary files (auto-cleanup on exit)
 TMP_NEW=$(mktemp -t master_hashes.new.XXXXXX) || exit 1
 TMP_EXIST=$(mktemp -t master_hashes.exist.XXXXXX) || { rm -f "$TMP_NEW"; exit 1; }
@@ -48,6 +50,7 @@ export HASH_PROG HASH_ARGS
 find "$DIR" -type f -print0 |
 	xargs -0 -n1 -P "$CONCURRENCY" sh -c '\
 f="$1"
+printf "HASHING: %s\n" "$f" >&2
 # compute hash (capture only the digest)
 digest=$($HASH_PROG $HASH_ARGS "$f" 2>/dev/null | awk "{print \$1}")
 # fallback if digest empty

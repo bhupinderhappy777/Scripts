@@ -50,6 +50,8 @@ OUT="$(safe_name "$TARGET_DIR").comparison.csv"
 
 echo "Comparing hashes: master='$MASTER_CSV'  target='$TARGET_CSV' -> $OUT"
 
+echo "Reading master CSV and target CSV..." >&2
+
 # Use embedded Python for robust CSV parsing (handles quoted fields and
 # ignores surrounding markdown fences like ``` or ```csv that may be in files)
 python3 - <<'PY'
@@ -102,12 +104,16 @@ for row in rows_from_csv(MASTER_CSV):
         continue
     master_map.setdefault(digest, []).append((path, filename))
 
+print(f'Read {len(master_map)} unique digests from master', file=sys.stderr)
+
 target_map = {}
 for row in rows_from_csv(TARGET_CSV):
     path, filename, digest = normalize_row(row)
     if not digest:
         continue
     target_map.setdefault(digest, []).append((path, filename))
+
+print(f'Read {len(target_map)} unique digests from target', file=sys.stderr)
 
 # Build comparison rows: for every digest present in both, produce all combinations
 rows = []
