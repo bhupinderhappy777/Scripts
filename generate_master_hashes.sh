@@ -43,9 +43,17 @@ TMP_NEW_DIG=$(mktemp -t master_hashes.newdig.XXXXXX) || { rm -f "$TMP_NEW" "$TMP
 TMP_EXISTING_PATHS=$(mktemp -t master_hashes.existing.XXXXXX) || { rm -f "$TMP_NEW" "$TMP_EXIST" "$TMP_NEW_DIG"; exit 1; }
 trap 'rm -f "$TMP_NEW" "$TMP_EXIST" "$TMP_NEW_DIG" "$TMP_EXISTING_PATHS"' EXIT
 
-# Extract existing paths from master CSV (first column, unquoted)
+# Extract existing paths from master CSV (first column) using proper CSV parsing
 if [ -s "$OUT" ]; then
-  awk -F, 'NR>1{p=$1; gsub(/^\s*"?/,"",p); gsub(/"?\s*$/,"",p); print p}' "$OUT" > "$TMP_EXISTING_PATHS"
+  python3 -c "
+import csv, sys
+with open('$OUT', 'r', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    next(reader, None)  # skip header
+    for row in reader:
+        if len(row) >= 1:
+            print(row[0].strip())
+" > "$TMP_EXISTING_PATHS"
 fi
 
 # Worker: compute hash for a single file and print CSV line.
@@ -84,6 +92,17 @@ if [ -z "$digest" ]; then
 		digest=$(openssl dgst -sha256 -r "$f" 2>/dev/null | awk "{print \$1}")
 	fi
 fi
+# Validate that digest is a valid SHA256 (64 hex characters)
+if [ -n "$digest" ]; then
+	digest_len=$(echo -n "$digest" | wc -c | tr -d " ")
+	if [ "$digest_len" -ne 64 ]; then
+		printf "WARNING: Invalid hash length for file: %s\n" "$f" >&2
+		printf "  Hash: [%s] (length: %s, expected: 64)\n" "$digest" "$digest_len" >&2
+	elif ! echo "$digest" | grep -qE "^[a-fA-F0-9]{64}$"; then
+		printf "WARNING: Hash contains non-hex characters for file: %s\n" "$f" >&2
+		printf "  Hash: [%s]\n" "$digest" >&2
+	fi
+fi
 # compute filename
 filename=$(basename -- "$f")
 # escape double-quotes for CSV fields (replace " with "")
@@ -99,11 +118,35 @@ if [ ! -s "$TMP_NEW" ]; then
   exit 0
 fi
 
-# Extract existing digests from master (third CSV column), strip quotes/spaces
-awk -F, 'NR>1{g=$3; gsub(/^\s*"?/,"",g); gsub(/"?\s*$/,"",g); print g}' "$OUT" > "$TMP_EXIST" || true
+# Extract existing digests from master (third CSV column) using proper CSV parsing
+python3 -c "
+import csv, sys
+with open('$OUT', 'r', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    next(reader, None)  # skip header
+    for row in reader:
+        if len(row) >= 3:
+            print(row[2].strip())
+" > "$TMP_EXIST" || true
 
-# Extract new digests
-awk -F, '{g=$3; gsub(/^\s*"?/,"",g); gsub(/"?\s*$/,"",g); print g}' "$TMP_NEW" > "$TMP_NEW_DIG"
+# Extract new digests using proper CSV parsing with validation
+python3 -c "
+import csv, sys, re
+hash_pattern = re.compile(r'^[a-fA-F0-9]{64}$')
+with open('$TMP_NEW', 'r', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    for row in reader:
+        if len(row) >= 3:
+            digest = row[2].strip()
+            # Validate SHA256 format (64 hex characters)
+            if not hash_pattern.match(digest):
+                print(f'WARNING: Invalid SHA256 hash detected!', file=sys.stderr)
+                print(f'  File: {row[0]}', file=sys.stderr)
+                print(f'  Filename: {row[1]}', file=sys.stderr)
+                print(f'  Hash value: [{digest}] (length: {len(digest)})', file=sys.stderr)
+                print(f'  Expected: 64 hexadecimal characters', file=sys.stderr)
+            print(digest)
+" > "$TMP_NEW_DIG"
 
 # Check for duplicates within new digests
 if sort "$TMP_NEW_DIG" | uniq -d | grep -q .; then
@@ -114,10 +157,19 @@ if sort "$TMP_NEW_DIG" | uniq -d | grep -q .; then
   echo "Please remove duplicates from the source directory first, or use fdupes to clean them up." >&2
   echo "" >&2
   echo "Files with duplicate content:" >&2
-  # Show files grouped by their duplicate hashes
+  # Show files grouped by their duplicate hashes with proper CSV parsing
   sort "$TMP_NEW_DIG" | uniq -d | while read -r dup_hash; do
     echo "  Hash: $dup_hash" >&2
-    grep -F "\"$dup_hash\"" "$TMP_NEW" | awk -F, '{gsub(/^\\s*"?/,"",$1); gsub(/"?\\s*$/,"",$1); print "    - " $1}' >&2
+    # Use Python to properly parse CSV and find matching files
+    python3 -c "
+import csv, sys
+hash_to_find = sys.argv[1]
+with open('$TMP_NEW', 'r', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    for row in reader:
+        if len(row) >= 3 and row[2].strip() == hash_to_find:
+            print(f'    - {row[0]}')
+" "$dup_hash" >&2
   done
   exit 6
 fi
@@ -140,13 +192,34 @@ if [ -s "$TMP_EXIST" ] && grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" >/dev/null 2>&1;
   echo "  3. If files are in a different location: These are true duplicates (same content)" >&2
   echo "" >&2
   echo "New files that match existing master hashes (showing first 10):" >&2
-  # Show new files that have hashes already in master
+  # Show new files that have hashes already in master with proper CSV parsing
   grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" | sort -u | head -10 | while read -r dup_hash; do
     echo "  Hash: $dup_hash" >&2
-    # Show new files with this hash
-    grep -F "\"$dup_hash\"" "$TMP_NEW" | awk -F, '{gsub(/^\\s*"?/,"",$1); gsub(/"?\\s*$/,"",$1); print "    New file: " $1}' >&2
-    # Show existing files in master with this hash
-    grep -F "\"$dup_hash\"" "$OUT" | awk -F, '{gsub(/^\\s*"?/,"",$1); gsub(/"?\\s*$/,"",$1); print "    In master: " $1}' | head -3 >&2
+    # Show new files with this hash using Python CSV parsing
+    python3 -c "
+import csv, sys
+hash_to_find = sys.argv[1]
+with open('$TMP_NEW', 'r', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    for row in reader:
+        if len(row) >= 3 and row[2].strip() == hash_to_find:
+            print(f'    New file: {row[0]}')
+" "$dup_hash" >&2
+    # Show existing files in master with this hash using Python CSV parsing
+    python3 -c "
+import csv, sys
+hash_to_find = sys.argv[1]
+count = 0
+with open('$OUT', 'r', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    next(reader, None)  # skip header
+    for row in reader:
+        if len(row) >= 3 and row[2].strip() == hash_to_find:
+            print(f'    In master: {row[0]}')
+            count += 1
+            if count >= 3:
+                break
+" "$dup_hash" >&2
   done
   TOTAL_DUPS=$(grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" | sort -u | wc -l | tr -d ' ')
   if [ "$TOTAL_DUPS" -gt 10 ]; then

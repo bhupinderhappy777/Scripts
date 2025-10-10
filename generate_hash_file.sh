@@ -30,9 +30,17 @@ TMP_NEW=$(mktemp -t hash_file.new.XXXXXX) || exit 1
 TMP_EXISTING_PATHS=$(mktemp -t hash_file.existing.XXXXXX) || { rm -f "$TMP_NEW"; exit 1; }
 trap 'rm -f "$TMP_NEW" "$TMP_EXISTING_PATHS"' EXIT
 
-# Extract existing paths from hash file CSV (first column, unquoted)
+# Extract existing paths from hash file CSV (first column) using proper CSV parsing
 if [ -s "$OUT" ]; then
-  awk -F, 'NR>1{p=$1; gsub(/^\s*"?/,"",p); gsub(/"?\s*$/,"",p); print p}' "$OUT" > "$TMP_EXISTING_PATHS"
+  python3 -c "
+import csv, sys
+with open('$OUT', 'r', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    next(reader, None)  # skip header
+    for row in reader:
+        if len(row) >= 1:
+            print(row[0].strip())
+" > "$TMP_EXISTING_PATHS"
 fi
 
 export HASH_PROG HASH_ARGS TMP_EXISTING_PATHS
@@ -61,6 +69,17 @@ digest=$($HASH_PROG $HASH_ARGS "$f" 2>/dev/null | awk "{print \$1}")
 if [ -z "$digest" ]; then
     if command -v openssl >/dev/null 2>&1; then
         digest=$(openssl dgst -sha256 -r "$f" 2>/dev/null | awk "{print \$1}")
+    fi
+fi
+# Validate that digest is a valid SHA256 (64 hex characters)
+if [ -n "$digest" ]; then
+    digest_len=$(echo -n "$digest" | wc -c | tr -d " ")
+    if [ "$digest_len" -ne 64 ]; then
+        printf "WARNING: Invalid hash length for file: %s\n" "$f" >&2
+        printf "  Hash: [%s] (length: %s, expected: 64)\n" "$digest" "$digest_len" >&2
+    elif ! echo "$digest" | grep -qE "^[a-fA-F0-9]{64}$"; then
+        printf "WARNING: Hash contains non-hex characters for file: %s\n" "$f" >&2
+        printf "  Hash: [%s]\n" "$digest" >&2
     fi
 fi
 filename=$(basename -- "$f")
