@@ -53,7 +53,7 @@ fi
 
 export HASH_PROG HASH_ARGS TMP_EXISTING_PATHS
 
-find "$DIR" -type f -print0 |
+find "$DIR" -type f ! -name "master_hashes.csv" -print0 |
 	xargs -0 -n1 -P "$CONCURRENCY" sh -c '\
 f="$1"
 
@@ -113,8 +113,12 @@ if sort "$TMP_NEW_DIG" | uniq -d | grep -q .; then
   echo "This indicates duplicate files exist in the source directory itself." >&2
   echo "Please remove duplicates from the source directory first, or use fdupes to clean them up." >&2
   echo "" >&2
-  echo "Duplicate hashes found:" >&2
-  sort "$TMP_NEW_DIG" | uniq -d >&2
+  echo "Files with duplicate content:" >&2
+  # Show files grouped by their duplicate hashes
+  sort "$TMP_NEW_DIG" | uniq -d | while read -r dup_hash; do
+    echo "  Hash: $dup_hash" >&2
+    grep -F "\"$dup_hash\"" "$TMP_NEW" | awk -F, '{gsub(/^\\s*"?/,"",$1); gsub(/"?\\s*$/,"",$1); print "    - " $1}' >&2
+  done
   exit 6
 fi
 
@@ -135,11 +139,18 @@ if [ -s "$TMP_EXIST" ] && grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" >/dev/null 2>&1;
   echo "  2. If you need to re-scan: Delete or backup master_hashes.csv and regenerate from scratch" >&2
   echo "  3. If files are in a different location: These are true duplicates (same content)" >&2
   echo "" >&2
-  echo "Duplicate hashes found (first 10):" >&2
-  grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" | sort -u | head -10 >&2
+  echo "New files that match existing master hashes (showing first 10):" >&2
+  # Show new files that have hashes already in master
+  grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" | sort -u | head -10 | while read -r dup_hash; do
+    echo "  Hash: $dup_hash" >&2
+    # Show new files with this hash
+    grep -F "\"$dup_hash\"" "$TMP_NEW" | awk -F, '{gsub(/^\\s*"?/,"",$1); gsub(/"?\\s*$/,"",$1); print "    New file: " $1}' >&2
+    # Show existing files in master with this hash
+    grep -F "\"$dup_hash\"" "$OUT" | awk -F, '{gsub(/^\\s*"?/,"",$1); gsub(/"?\\s*$/,"",$1); print "    In master: " $1}' | head -3 >&2
+  done
   TOTAL_DUPS=$(grep -Fxf "$TMP_NEW_DIG" "$TMP_EXIST" | sort -u | wc -l | tr -d ' ')
   if [ "$TOTAL_DUPS" -gt 10 ]; then
-    echo "... and $((TOTAL_DUPS - 10)) more duplicate(s)" >&2
+    echo "... and $((TOTAL_DUPS - 10)) more duplicate hash(es)" >&2
   fi
   exit 7
 fi
