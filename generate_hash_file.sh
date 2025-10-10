@@ -41,6 +41,12 @@ find "$DIR" -type f ! -name "hash_file.csv" -print0 | \
     xargs -0 -n1 -P "$CONCURRENCY" sh -c '
 f="$1"
 
+# Defensive check: only hash if it is a regular file
+if [ ! -f "$f" ]; then
+    printf "SKIPPING (not a regular file): %s\n" "$f" >&2
+    exit 0
+fi
+
 # Get absolute path first
 if command -v realpath >/dev/null 2>&1; then
     fullpath=$(realpath "$f")
@@ -63,6 +69,13 @@ if [ -z "$digest" ]; then
         digest=$(openssl dgst -sha256 -r "$f" 2>/dev/null | awk "{print \$1}")
     fi
 fi
+
+# Skip if we still could not compute a valid digest
+if [ -z "$digest" ]; then
+    printf "WARNING: Failed to compute hash for: %s\n" "$f" >&2
+    exit 0
+fi
+
 filename=$(basename -- "$f")
 # escape double-quotes for CSV fields (replace " with "")
 esc_fullpath=$(echo "$fullpath" | sed "s/\"/\"\"/g")
