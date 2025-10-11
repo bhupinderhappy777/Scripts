@@ -321,6 +321,12 @@ recommended for most use cases as it:
   to quarantine, find internal duplicates with fdupes, move unique files to
   master, and generate a comprehensive summary report. See "Complete Automated
   Deduplication Process" section above for details.
+- `extract_archives.sh` — **utility script** for extracting compressed archives.
+  Recursively finds all compressed files (.zip, .tar.gz, .tgz, .tar.bz2, .tbz2,
+  .tar.xz, .txz, .gz, .bz2, .xz, .7z, .rar) in a directory, extracts them to
+  their current location, and removes the original archives after successful
+  extraction. Supports dry-run mode and confirmation prompts for safety. See
+  "Utility Scripts" section for details.
 
 Prerequisites
 - A POSIX-like shell (Bash). On Windows use WSL, Git Bash, or similar.
@@ -424,6 +430,84 @@ The script will:
 - Move all other duplicates to a `<foldername>-quarantined` folder in the
   parent directory
 - Preserve directory structure in the quarantine folder
+
+## Utility Scripts
+
+### Extract and Remove Archives (`extract_archives.sh`)
+
+A standalone utility script that recursively finds all compressed archive files
+in a directory, extracts them to their current location, and removes the
+original archives after successful extraction.
+
+**Supported archive formats**:
+- `.zip` - ZIP archives
+- `.tar` - TAR archives
+- `.tar.gz`, `.tgz` - Gzip-compressed TAR archives
+- `.tar.bz2`, `.tbz2` - Bzip2-compressed TAR archives
+- `.tar.xz`, `.txz` - XZ-compressed TAR archives
+- `.gz` - Standalone Gzip files
+- `.bz2` - Standalone Bzip2 files
+- `.xz` - Standalone XZ files
+- `.7z` - 7-Zip archives
+- `.rar` - RAR archives
+
+**Usage**:
+```bash
+./extract_archives.sh [-n] [-y] [directory]
+```
+
+**Options**:
+- `-n` - Dry-run mode: show what would be extracted but don't extract or delete
+- `-y` - Auto-confirm: don't prompt before proceeding
+
+**Arguments**:
+- `directory` - Path to search for archives (default: current directory)
+
+**Examples**:
+
+1. Extract all archives in current directory (with confirmation prompt):
+```bash
+./extract_archives.sh
+```
+
+2. Dry-run to see what would be extracted:
+```bash
+./extract_archives.sh -n /path/to/folder
+```
+
+3. Extract all archives in a specific directory without prompts:
+```bash
+./extract_archives.sh -y /path/to/folder
+```
+
+**How it works**:
+1. Recursively searches the directory for all supported archive types
+2. Lists all found archives (first 20 shown if more than 20)
+3. Prompts for confirmation (unless `-y` is used)
+4. Extracts each archive to its current directory
+5. Removes the original archive only if extraction was successful
+6. Displays a summary with count of successful/failed extractions
+
+**Safety features**:
+- Archives are only deleted after successful extraction
+- Failed extractions preserve the original archive
+- Dry-run mode (`-n`) lets you preview what will be extracted
+- Progress is shown for each archive being processed
+- Archives with extraction failures are clearly reported
+
+**Prerequisites**:
+- Standard extraction tools must be installed for the formats you want to extract:
+  - `unzip` for ZIP files
+  - `tar` for TAR archives
+  - `gunzip` / `gzip` for .gz files
+  - `bunzip2` / `bzip2` for .bz2 files
+  - `unxz` / `xz` for .xz files
+  - `7z` for 7-Zip archives (install `p7zip-full` on Debian/Ubuntu)
+  - `unrar` for RAR archives
+
+**Note**: If an extraction tool is not available for a particular archive format,
+that archive will be skipped with an error message, and the original file will be
+preserved.
 
 Options and special cases
 - If multiple `*.comparison.csv` files exist in the working directory
