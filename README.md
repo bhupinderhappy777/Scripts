@@ -293,22 +293,55 @@ recommended for most use cases as it:
   aborts without modifying the master CSV so you can inspect the conflict
   and decide how to proceed. Concurrency for hash workers is controlled
   by the `CONCURRENCY` environment variable (default: 32).
+
+  ```bash
+  ./generate_master_hashes.sh /path/to/master/folder
+  # Or with custom concurrency:
+  CONCURRENCY=64 ./generate_master_hashes.sh /path/to/master/folder
+  ```
+
 - `generate_hash_file.sh` — same as the master generator but writes
   `hash_file.csv` inside a compared folder (used by `compare_hashes.sh`).
+
+  ```bash
+  ./generate_hash_file.sh /path/to/compared/folder
+  ```
+
 - `compare_hashes.sh` — compares `hash_file.csv` from a target folder
   against the `master_hasher.csv` (preferred) or `master_hashes.csv` in
   the current working directory and produces a `*.comparison.csv` listing
   matching files.
+
+  ```bash
+  ./compare_hashes.sh /path/to/compared/folder
+  # Creates: <path>.comparison.csv in the current directory
+  ```
+
 - `deletion.sh` — reads the produced `*.comparison.csv` and moves the
   files listed in the `compared_path`/`compared_filename` columns to a
   quarantine folder. The quarantine folder is created in the parent directory
   with the name `<foldername>-quarantined`, similar to how `fdupes.sh` works.
   Supports dry-run and confirmation options.
+
+  ```bash
+  ./deletion.sh -n    # dry-run: show what would be moved
+  ./deletion.sh       # interactive: prompts for confirmation (type YES)
+  ./deletion.sh -y    # auto-confirm: move without prompt
+  ./deletion.sh -f comparison.csv  # specify comparison file
+  ```
+
 - `fdupes.sh` — uses the `fdupes` tool to find duplicate files within a
   directory and moves duplicates to a quarantine folder while keeping one
   working copy in the original location. The quarantine folder is created
   in the parent directory with the name `<foldername>-quarantined`.
   Supports dry-run and confirmation options.
+
+  ```bash
+  ./fdupes.sh -n /path/to/folder      # dry-run
+  ./fdupes.sh /path/to/folder         # interactive (type YES)
+  ./fdupes.sh -y /path/to/folder      # auto-confirm
+  ./fdupes.sh -n                      # dry-run current directory
+  ```
 - `move_to_master.sh` — moves unique files from a compared folder to the
   master folder after verifying they are not duplicates. Takes two arguments:
   the compared folder and the master folder. Reads `hash_file.csv` from the
