@@ -45,7 +45,7 @@ process_file() {
     FILENAME_NO_EXT="${RELATIVE_PATH%.*}"
 
     OUTPUT_DIR="$OUTPUT_ROOT_DIR/$RELATIVE_DIR"
-    OUTPUT_FILE="$OUTPUT_DIR/${FILENAME_NO_EXT##*/}_encoded.m4a"
+    OUTPUT_FILE="$OUTPUT_DIR/${FILENAME_NO_EXT##*/}_encoded.mp4"
 
     mkdir -p "$OUTPUT_DIR"
 
@@ -66,6 +66,25 @@ process_file() {
         duration=1
     fi
 
+    # Get current audio bitrate in kbps
+    AUDIO_BITRATE=$(ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of default=noprint_wrappers=1:nokey=1 "$SOURCE_AUDIO")
+    
+    # Convert to kbps if we got a value
+    if [ -n "$AUDIO_BITRATE" ] && [ "$AUDIO_BITRATE" != "N/A" ]; then
+        AUDIO_BITRATE_KBPS=$((AUDIO_BITRATE / 1000))
+    else
+        # If we can't detect bitrate, default to 192k
+        AUDIO_BITRATE_KBPS=192
+    fi
+    
+    # Set target bitrate: cap at 192k if higher, otherwise keep original
+    TARGET_BITRATE=192
+    if [ "$AUDIO_BITRATE_KBPS" -lt "$TARGET_BITRATE" ]; then
+        TARGET_BITRATE=$AUDIO_BITRATE_KBPS
+    fi
+    
+    echo "   -> Source bitrate: ${AUDIO_BITRATE_KBPS}k, Target bitrate: ${TARGET_BITRATE}k"
+
 # Skip if output file already exists
 if [[ -f "$OUTPUT_FILE" ]]; then
     echo "   -> Skipping (already exists): $OUTPUT_FILE"
@@ -74,8 +93,8 @@ if [[ -f "$OUTPUT_FILE" ]]; then
 fi
 
     # FFmpeg Command for audio encoding
-    # Using AAC codec with 192k bitrate for high quality audio
-    ffmpeg -i "$SOURCE_AUDIO" -c:a aac -b:a 192k -vn -y "$OUTPUT_FILE" -progress - -nostats 2>>"$MASTER_LOG_FILE" | show_progress "$duration"
+    # Using AAC codec with adaptive bitrate for optimal quality/size ratio
+    ffmpeg -i "$SOURCE_AUDIO" -c:a aac -b:a "${TARGET_BITRATE}k" -vn -y "$OUTPUT_FILE" -progress - -nostats 2>>"$MASTER_LOG_FILE" | show_progress "$duration"
 
     FFMPEG_EXIT_CODE=${PIPESTATUS[0]}
 
