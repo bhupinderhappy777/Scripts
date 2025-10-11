@@ -73,9 +73,24 @@ if [[ -f "$OUTPUT_FILE" ]]; then
     return 0
 fi
 
+    # Detect source audio bitrate to avoid upsampling
+    SRC_BITRATE=$(ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of default=noprint_wrappers=1:nokey=1 "$SOURCE_AUDIO")
+    
+    # Default target bitrate: 128k (optimal balance of quality and file size)
+    TARGET_BITRATE="128k"
+    
+    # If source bitrate is available and lower than 128k, match source to avoid upsampling
+    if [ -n "$SRC_BITRATE" ] && [ "$SRC_BITRATE" != "N/A" ]; then
+        SRC_BITRATE_K=$((SRC_BITRATE / 1000))
+        if [ "$SRC_BITRATE_K" -lt 128 ] && [ "$SRC_BITRATE_K" -gt 0 ]; then
+            TARGET_BITRATE="${SRC_BITRATE_K}k"
+        fi
+    fi
+
     # FFmpeg Command for audio encoding
-    # Using AAC codec with 192k bitrate for high quality audio
-    ffmpeg -i "$SOURCE_AUDIO" -c:a aac -b:a 192k -vn -y "$OUTPUT_FILE" -progress - -nostats 2>>"$MASTER_LOG_FILE" | show_progress "$duration"
+    # Using AAC codec with optimized bitrate for efficient file size and acceptable quality
+    # Target: 128k for most files (transparent quality), lower if source is already low bitrate
+    ffmpeg -i "$SOURCE_AUDIO" -c:a aac -b:a "$TARGET_BITRATE" -vn -y "$OUTPUT_FILE" -progress - -nostats 2>>"$MASTER_LOG_FILE" | show_progress "$duration"
 
     FFMPEG_EXIT_CODE=${PIPESTATUS[0]}
 
