@@ -315,12 +315,63 @@ recommended for most use cases as it:
   compared folder, checks hashes against `master_hashes.csv`, and only moves
   files that don't already exist in the master collection. Updates
   `master_hashes.csv` with newly moved files.
+
+  ```bash
+  ./move_to_master.sh /path/to/compared/folder /path/to/master/folder
+  ```
 - `deduplicate.sh` — **main orchestration script** that automates the complete
   de-duplication workflow. Runs all the above scripts in the correct order to:
   generate hashes for master and compared folders, compare them, move duplicates
   to quarantine, find internal duplicates with fdupes, move unique files to
   master, and generate a comprehensive summary report. See "Complete Automated
   Deduplication Process" section above for details.
+
+### Additional Utility Scripts
+
+- `encoder.sh` — video encoding script that recursively processes video files
+  (MP4, MOV, MPG, MKV, VOB) in the current directory and encodes them to H.264
+  format with optimized settings. Outputs to a parallel directory structure
+  named `<dirname>_encoded`. Features: parallel processing (4 jobs default),
+  automatic scaling for videos >1080p, progress tracking, and comprehensive
+  logging. Requires `ffmpeg` and `ffprobe`.
+
+  ```bash
+  cd /path/to/video/folder
+  ./encoder.sh
+  ```
+
+- `audio_encoder.sh` — audio encoding script that recursively processes audio
+  files (MP3, FLAC, WAV, AAC, M4A, OGG, WMA) in the current directory and
+  encodes them to AAC format. Outputs to a parallel directory structure named
+  `<dirname>_audio_encoded`. Features: parallel processing (4 jobs default),
+  intelligent bitrate selection (avoids upsampling), progress tracking, and
+  comprehensive logging. Requires `ffmpeg` and `ffprobe`.
+
+  ```bash
+  cd /path/to/audio/folder
+  ./audio_encoder.sh
+  ```
+
+- `verify.sh` — verification script for encoded video files. Compares source
+  videos with their encoded versions by checking duration differences
+  (default tolerance: ±10 seconds). Generates detailed verification logs and
+  a list of failed files. Expects encoded files in a parallel directory
+  structure named `<dirname>_encoded` with `_encoded.mp4` suffix.
+
+  ```bash
+  cd /path/to/source/video/folder
+  ./verify.sh
+  ```
+
+- `rsync_transfer.sh` — interactive rsync transfer script with progress
+  tracking and detailed logging. Prompts for source and destination paths
+  and performs rsync with archive, compression, and verbose options.
+  Generates timestamped logs with transfer statistics.
+
+  ```bash
+  ./rsync_transfer.sh
+  # Then follow the prompts to enter source and destination paths
+  ```
 
 Prerequisites
 - A POSIX-like shell (Bash). On Windows use WSL, Git Bash, or similar.
