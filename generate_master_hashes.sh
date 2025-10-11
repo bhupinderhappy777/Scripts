@@ -2,15 +2,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# generate_csv.sh
-# Recursively walk a directory (default: current directory), compute SHA-256
-# for every regular file in parallel (8 workers) and write results to
-# master_hashes.csv with columns: path,filename,sha256
+# generate_master_hashes.sh
+# Recursively walk a directory and compute SHA-256 for every regular file,
+# writing results to master_hashes.csv with columns: fullpath,filename,sha256
 #
 # Usage:
-#   ./generate_csv.sh [directory]
+#   ./generate_master_hashes.sh /path/to/master/folder
+#   # Or for current directory:
+#   ./generate_master_hashes.sh .
+#
+# Output:
+#   Creates or updates master_hashes.csv in the current directory
+#
+# Features:
+#   - Append-aware: if master_hashes.csv exists, appends new entries
+#   - Collision detection: aborts if duplicate digests are found
+#   - Parallel processing (32 workers by default, configurable via CONCURRENCY env var)
+#   - Supports sha256sum or shasum
+#
+# Prerequisites:
+#   - sha256sum (or shasum with -a 256 support)
+#   - python3 for CSV parsing
+#
 # Example:
-#   ./generate_csv.sh /path/to/data
+#   CONCURRENCY=64 ./generate_master_hashes.sh /path/to/data
 
 DIR=${1:-.}
 OUT="master_hashes.csv"

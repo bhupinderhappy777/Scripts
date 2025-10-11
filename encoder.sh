@@ -1,5 +1,29 @@
 #!/bin/bash
 
+# encoder.sh
+# Video encoding script that recursively processes video files in the current
+# directory and encodes them to H.264 format with optimized settings.
+# Outputs to a parallel directory structure named <dirname>_encoded.
+#
+# Usage:
+#   cd /path/to/video/folder
+#   ./encoder.sh
+#
+# Features:
+#   - Parallel processing (4 jobs by default, configurable via PARALLEL_JOBS)
+#   - Automatic scaling for videos >1080p (scales down to 1080p)
+#   - Videos ≤1080p are not scaled
+#   - H.264 encoding with CRF 28 (good quality/size balance)
+#   - AAC audio at 96k bitrate
+#   - Progress tracking with ETA
+#   - Comprehensive logging to timestamped log file
+#   - Skips already encoded files
+#
+# Prerequisites:
+#   - ffmpeg and ffprobe must be installed
+#
+# Supported formats: MP4, MOV, MPG, MKV, VOB
+
 # --- Configuration ---
 MASTER_LOG_FILE="ffmpeg_recursive_conversion_$(date +%Y%m%d_%H%M%S).log"
 PARALLEL_JOBS=4   # how many files to process at once

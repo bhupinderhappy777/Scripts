@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# generate_hash_file.sh
+# Recursively walk a directory and compute SHA-256 hashes for every regular
+# file, writing results to hash_file.csv inside that directory.
+# This is used by compare_hashes.sh to find duplicates.
+#
+# Usage:
+#   ./generate_hash_file.sh /path/to/compared/folder
+#   # Or for current directory:
+#   ./generate_hash_file.sh .
+#
+# Output:
+#   Creates or updates hash_file.csv in the target directory with columns:
+#   fullpath,filename,sha256
+#
+# Features:
+#   - Append-aware: skips files already in hash_file.csv
+#   - Parallel processing (32 workers by default)
+#   - Supports sha256sum or shasum
+#
+# Prerequisites:
+#   - sha256sum (or shasum with -a 256 support)
+#   - python3 for CSV parsing
+
 DIR=${1:-.}
 OUT="$DIR/hash_file.csv"
 CONCURRENCY=32
