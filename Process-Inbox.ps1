@@ -18,7 +18,14 @@
 
 # Acquire global mutex to prevent concurrent runs
 $mutexName = 'Global\ProcessInboxMutex'
-$mutex = New-Object System.Threading.Mutex($false, $mutexName, [ref]$createdNew)
+# ensure the by-ref variable exists before passing to New-Object
+$createdNew = $false
+try {
+    $mutex = New-Object System.Threading.Mutex($false, $mutexName, [ref]$createdNew)
+} catch {
+    Write-Error "Failed to create mutex '$mutexName': $($_.Exception.Message)"
+    exit 1
+}
 $haveLock = $false
 try {
     # Try to acquire immediately; if another instance holds it, exit
