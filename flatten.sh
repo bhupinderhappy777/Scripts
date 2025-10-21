@@ -5,38 +5,97 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-dry_run=false
-verbose=false
+#!/usr/bin/env bash
+set -o errexit
+set -o nounset
+set -o pipefail
 
-usage() {
+# Interactive flatten script
+# Prompts for file extension to collect (e.g. .jpg or jpg) and output directory
+
+print_usage() {
   cat <<EOF
-Usage: $(basename "$0") [-n|--dry-run] [-v|--verbose] [target_dir]
-  -n, --dry-run    Show what would be moved (no changes)
+Usage: $(basename "$0") [-n|--dry-run] [-v|--verbose]
+This script will move files with a given extension from subdirectories into an output directory.
+You will be prompted for the extension and the output directory at runtime.
+Options:
+  -n, --dry-run    Show what would be moved without making changes
   -v, --verbose    Print each move
-If target_dir is omitted, uses current directory.
 EOF
 }
 
-# parse args
-while (( "$#" )); do
+dry_run=false
+verbose=false
+
+while (("$#")); do
   case "$1" in
     -n|--dry-run) dry_run=true; shift ;;
     -v|--verbose) verbose=true; shift ;;
-    -h|--help) usage; exit 0 ;;
+    -h|--help) print_usage; exit 0 ;;
     --) shift; break ;;
-    -*)
-      echo "Unknown option: $1" >&2
-      usage
-      exit 2
-      ;;
-    *)
-      target_dir="$1"
-      shift
-      ;;
+    -*) echo "Unknown option: $1" >&2; print_usage; exit 2 ;;
+    *) break ;;
   esac
 done
 
-target_dir="${target_dir:-$(pwd)}"
+read -rp "Enter file extension to collect (e.g. .jpg or jpg) : " user_ext
+# Normalize extension: allow "jpg" or ".jpg" -> ".jpg"
+if [[ -z "$user_ext" ]]; then
+  echo "No extension provided, aborting." >&2
+  exit 2
+fi
+if [[ "$user_ext" == .* ]]; then
+  ext="$user_ext"
+else
+  ext=".$user_ext"
+fi
+
+read -rp "Enter output directory (absolute or relative). Will be created if missing: " out_dir
+if [[ -z "$out_dir" ]]; then
+  echo "No output directory provided, aborting." >&2
+  exit 2
+fi
+
+# Expand to absolute path
+out_dir=$(cd "$out_dir" 2>/dev/null && pwd || (mkdir -p "$out_dir" && cd "$out_dir" && pwd))
+echo "Collecting files with extension '$ext' into: $out_dir"
+
+# Find files matching extension under current directory (skip files at top-level)
+root_dir=$(pwd)
+
+# Use find with -print0 to handle special chars in filenames
+find "$root_dir" -mindepth 2 -type f -name "*${ext}" -print0 |
+  while IFS= read -r -d '' file; do
+    base=$(basename -- "$file")
+
+    # Determine a safe destination path and avoid collisions
+    name="${base%.*}"
+    # For dotfiles that start with dot and have no other dot, keep the full name
+    if [[ "$base" == .* && "$base" != *.* ]]; then
+      name="$base"
+      file_ext=""
+    else
+      file_ext=".${base##*.}"
+    fi
+
+    dest="$out_dir/${name}${file_ext}"
+    count=1
+    while [[ -e "$dest" ]]; do
+      dest="$out_dir/${name}_$count${file_ext}"
+      ((count++))
+    done
+
+    if $dry_run; then
+      printf "DRY-RUN: %s -> %s\n" "$file" "$dest"
+    else
+      if $verbose; then
+        printf "MOVE: %s -> %s\n" "$file" "$dest"
+      fi
+      mv -- "$file" "$dest"
+    fi
+  done
+
+echo "Done."
 
 if [[ ! -d "$target_dir" ]]; then
   echo "Target directory does not exist: $target_dir" >&2
