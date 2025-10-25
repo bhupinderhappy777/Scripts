@@ -28,12 +28,17 @@ NC='\033[0m' # No Color
 GITHUB_REPO_URL="https://raw.githubusercontent.com/bhupinderhappy777/Scripts/main"
 
 # Get the directory where this script is located
-# If running via curl, use current directory
-if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Robustly determine the directory of this script (handles symlinks, $0 fallback, and spaces)
+_script_source="${BASH_SOURCE[0]:-$0}"
+if command -v readlink >/dev/null 2>&1 && readlink -f "$_script_source" >/dev/null 2>&1; then
+    SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$_script_source")")" >/dev/null 2>&1 && pwd -P)"
+elif command -v realpath >/dev/null 2>&1; then
+    SCRIPT_DIR="$(cd "$(dirname "$(realpath "$_script_source")")" >/dev/null 2>&1 && pwd -P)"
 else
-    SCRIPT_DIR="$(pwd)"
+    # Fall back to pwd if we can't resolve the script path (e.g., running via curl)
+    SCRIPT_DIR="$(cd "$(dirname "$_script_source")" >/dev/null 2>&1 && pwd -P)" || SCRIPT_DIR="$(pwd)"
 fi
+unset _script_source
 
 # Log file for the session
 LOG_FILE="deduplication_$(date +%Y%m%d_%H%M%S).log"
