@@ -143,7 +143,7 @@ log_master "Conversion started at: $(date '+%Y-%m-%d %H:%M:%S')"
 log_master "--------------------------------------------------------"
 
 # Use xargs to launch parallel jobs
-find . -type f \( -iname "*.mp4" -o -iname "*.mov" -o -iname "*.mpg" -o -iname "*.mkv" -o -iname "*.vob" \) \
+find . -type f \( -iname "*.MOV" -o -iname "*.mov" -o -iname "*.mpg" -o -iname "*.mkv" -o -iname "*.vob" \) \
     ! -path "$OUTPUT_ROOT_DIR/*" -print0 | \
 xargs -0 -n1 -P"$PARALLEL_JOBS" bash -c 'process_file "$@"' _
 
