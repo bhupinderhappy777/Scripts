@@ -195,17 +195,18 @@ if [ "${1:-}" = "--watch" ] || [ "${1:-}" = "-w" ]; then
     process_file "$f"
   done < <(find "$INBOX" -mindepth 1 -path "$DUPLICATES" -prune -o -type f -print0)
 
-  # Monitor for new files and moved-to events
-  inotifywait -m -e create -e moved_to --format '%w%f' "$INBOX" | while IFS= read -r newfile; do
+  # Monitor for new files and moved-to events using process substitution so the loop runs
+  # in the main shell (avoids subshell issues under systemd).
+  while IFS= read -r newfile; do
     # skip events inside duplicates folder
     case "$newfile" in
-      "$DUPLICATES"* ) continue ;;
+      "$DUPLICATES"*) continue ;;
     esac
     # only process regular files
     if [ -f "$newfile" ]; then
       process_file "$newfile"
     fi
-  done
+  done < <(inotifywait -m -e create -e moved_to --format '%w%f' "$INBOX")
 else
   # Batch mode: find and process all existing files
   files_found=()
