@@ -132,6 +132,12 @@ process_file() {
   fi
   ext_lc=$(printf "%s" "$ext" | tr 'A-Z' 'a-z')
 
+  # Skip temporary/in-progress files (Syncthing and other .tmp writers)
+  if [[ "$filename" == .syncthing.* ]] || [[ "$filename" == *.tmp ]]; then
+    echo "Skipping temporary/in-progress file '$filename'"
+    return 0
+  fi
+
   if [ -n "$ext_lc" ] && [[ ${MAPPINGS[$ext_lc]+_} ]]; then
     target="${MAPPINGS[$ext_lc]}"
   else
