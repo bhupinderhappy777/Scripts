@@ -132,7 +132,11 @@ process_file() {
   fi
   ext_lc=$(printf "%s" "$ext" | tr 'A-Z' 'a-z')
 
-  target="${MAPPINGS[$ext_lc]:-$MISC}"
+  if [ -n "$ext_lc" ] && [[ ${MAPPINGS[$ext_lc]+_} ]]; then
+    target="${MAPPINGS[$ext_lc]}"
+  else
+    target="$MISC"
+  fi
   echo "Processing '$filename' (.$ext_lc) -> $target"
   mkdir -p "$target"
   dest="$target/$filename"
