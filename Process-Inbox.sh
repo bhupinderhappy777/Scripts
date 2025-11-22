@@ -196,17 +196,24 @@ if [ "${1:-}" = "--watch" ] || [ "${1:-}" = "-w" ]; then
   done < <(find "$INBOX" -mindepth 1 -path "$DUPLICATES" -prune -o -type f -print0)
 
   # Monitor for new files and moved-to events using process substitution so the loop runs
-  # in the main shell (avoids subshell issues under systemd).
-  while IFS= read -r newfile; do
-    # skip events inside duplicates folder
-    case "$newfile" in
-      "$DUPLICATES"*) continue ;;
-    esac
-    # only process regular files
-    if [ -f "$newfile" ]; then
-      process_file "$newfile"
-    fi
-  done < <(inotifywait -m -e create -e moved_to --format '%w%f' "$INBOX")
+  # in the main shell (avoids subshell issues under systemd). Use -r to watch subdirectories
+  # and include close_write so files written by writers that rename into place are handled.
+  # Wrap in a restart loop so if inotifywait exits, we restart it automatically.
+  while true; do
+    while IFS= read -r newfile; do
+      # skip events inside duplicates folder
+      case "$newfile" in
+        "$DUPLICATES"*) continue ;;
+      esac
+      # only process regular files
+      if [ -f "$newfile" ]; then
+        process_file "$newfile"
+      fi
+    done < <(inotifywait -m -r -e create -e moved_to -e close_write --format '%w%f' "$INBOX")
+
+    echo "inotifywait exited unexpectedly; restarting in 1s" >&2
+    sleep 1
+  done
 else
   # Batch mode: find and process all existing files
   files_found=()
