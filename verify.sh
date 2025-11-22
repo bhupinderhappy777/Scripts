@@ -1,5 +1,31 @@
 #!/bin/bash
 
+# verify.sh
+# Verification script for encoded video files. Compares source videos with
+# their encoded versions by checking duration differences.
+#
+# Usage:
+#   cd /path/to/source/video/folder
+#   ./verify.sh
+#
+# Features:
+#   - Compares source and encoded video durations
+#   - Configurable tolerance (default: ±10 seconds)
+#   - Expects encoded files in parallel directory structure
+#   - Generates detailed verification log
+#   - Creates list of failed/missing files
+#   - Summary statistics (OK, failed, skipped counts)
+#   - Folder size comparison
+#
+# Prerequisites:
+#   - ffprobe must be installed
+#
+# Expected structure:
+#   - Source videos in current directory
+#   - Encoded videos in ../<dirname>_encoded/ with _encoded.mp4 suffix
+#
+# Supported formats: MP4, MOV, AVI, MKV, VOB
+
 # --- Configuration ---
 TOLERANCE=10   # seconds difference allowed
 BASE_DIR="$(basename "$(pwd)")"

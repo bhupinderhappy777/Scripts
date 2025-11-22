@@ -1,5 +1,30 @@
 #!/bin/bash
 
+# rsync_transfer.sh
+# Interactive rsync transfer script with progress tracking and detailed logging.
+# Prompts for source and destination paths and performs rsync with archive,
+# compression, and verbose options.
+#
+# Usage:
+#   ./rsync_transfer.sh
+#   # Then follow the prompts to enter source and destination paths
+#
+# Features:
+#   - Interactive prompts for source and destination
+#   - Archive mode (preserves permissions, times, recursive)
+#   - Compression during transfer
+#   - Progress tracking
+#   - Detailed timestamped logging
+#   - Transfer statistics and timing
+#
+# Prerequisites:
+#   - rsync must be installed
+#
+# Example:
+#   ./rsync_transfer.sh
+#   Enter SOURCE file or directory path: /mnt/c/Users/Name/file.zip
+#   Enter REMOTE DESTINATION path: user@host:/remote/path/
+
 # --- Configuration ---
 LOG_FILE="rsync_transfer_log_$(date +%Y%m%d_%H%M%S).txt"
 

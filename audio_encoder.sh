@@ -1,5 +1,27 @@
 #!/bin/bash
 
+# audio_encoder.sh
+# Audio encoding script that recursively processes audio files in the current
+# directory and encodes them to AAC format with optimized settings.
+# Outputs to a parallel directory structure named <dirname>_audio_encoded.
+#
+# Usage:
+#   cd /path/to/audio/folder
+#   ./audio_encoder.sh
+#
+# Features:
+#   - Parallel processing (4 jobs by default, configurable via PARALLEL_JOBS)
+#   - Intelligent bitrate selection (defaults to 128k AAC)
+#   - Avoids upsampling (uses source bitrate if lower than 128k)
+#   - Progress tracking with ETA
+#   - Comprehensive logging to timestamped log file
+#   - Skips already encoded files
+#
+# Prerequisites:
+#   - ffmpeg and ffprobe must be installed
+#
+# Supported formats: MP3, FLAC, WAV, AAC, M4A, OGG, WMA
+
 # --- Configuration ---
 MASTER_LOG_FILE="ffmpeg_audio_conversion_$(date +%Y%m%d_%H%M%S).log"
 PARALLEL_JOBS=4   # how many files to process at once
